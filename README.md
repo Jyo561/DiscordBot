@@ -96,6 +96,3 @@ expense/
 
 ---
 
-## 📜 License
-
-MIT © 2025 Your Name
