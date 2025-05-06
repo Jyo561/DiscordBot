@@ -1,0 +1,8 @@
+6.00, Restaurant, Soup
+9.00, Restaurant, Salad
+23.00, Restaurant, Steak
+15.00, Restaurant, Pasta
+3.00, Restaurant, Coffee
+2.50, Restaurant, Tea
+5.00, Restaurant, Beer
+5.08, Restaurant, Tax

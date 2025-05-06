@@ -17,7 +17,7 @@ struct Handler;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Expense {
-    amount: i32,
+    amount: f64,
     place: String,
     purpose: String,
     spend_date: String,
@@ -82,6 +82,42 @@ impl EventHandler for Handler {
                             // 2. Send to Gemini API
                                     match call_gemini_api(&image_bytes).await {
                                         Ok(result_text) => {
+                                            let result_text_cloned = result_text.clone(); // clone to use inside spawn_blocking
+
+                                            let write_result = tokio::task::spawn_blocking(move || -> Result<(), std::io::Error> {
+                                                let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+                                                let file_path = format!("expense/{}.txt", today);
+
+                                                std::fs::create_dir_all("expense").expect("Error");
+
+                                                let mut file = std::fs::OpenOptions::new()
+                                                        .create(true)
+                                                        .append(true)
+                                                        .open(&file_path).expect("Error");
+
+                                                for line in result_text_cloned.lines() {
+                                                    if !line.trim().is_empty() {
+                                                        writeln!(file, "{}", line.trim()).expect("Error");
+                                                    }
+                                                }
+
+                                                Ok(())
+                                            }).await;
+
+                                            match write_result {
+                                                Ok(Ok(())) => {
+                                                    msg.channel_id.say(&ctx.http, "✅ Expenses saved!").await.ok();
+                                                }
+                                                Ok(Err(e)) => {
+                                                    msg.channel_id.say(&ctx.http, format!("❌ File write error: {}", e)).await.ok();
+                                                }
+                                                Err(e) => {
+                                                    msg.channel_id.say(&ctx.http, format!("❌ Task join error: {}", e)).await.ok();
+                                                }
+
+                                            }
+
+                                            //msg.channel_id.say(&ctx.http, format!("🧾 Gemini Response:\n{}", result_text)).await.ok();
                                             msg.channel_id.say(&ctx.http, format!("🧾 Gemini Response:\n{}", result_text)).await.ok();
                                         },
                                         Err(e) => {
@@ -158,7 +194,11 @@ async fn call_gemini_api(image_bytes: &Bytes) -> Result<String, Box<dyn Error + 
 
     let body = serde_json::json!({
         "contents": [{
-            "parts": [{
+            "parts": [
+            {
+                "text": "Extract the expenses from this bill or receipt. For each item, return it as: amount,place,purpose on a new line. If multiple items exist, list each on a separate line."
+            },
+            {
                 "inline_data": {
                     "mime_type": "image/png",
                     "data": image_b64
@@ -169,7 +209,7 @@ async fn call_gemini_api(image_bytes: &Bytes) -> Result<String, Box<dyn Error + 
 
     let client = reqwest::Client::new();
     let res = client
-        .post("https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent")
+        .post("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent")
         .query(&[("key", &api_key)])
         .json(&body)
         .send()
